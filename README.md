@@ -9,8 +9,9 @@ If your project depends on your own critical input to succeed, and you want to a
 `mcp-criticmarkup` provides a frictionless alternative to Git workflows when collaborating with LLMs on Markdown documents. Instead of full-file overwrites or raw git diffs, the LLM proposes revisions using native [CriticMarkup](https://criticmarkup.com/) and manages threaded discussions.
 
 <p align="center">
-  <img src="vignettes/workflow.svg" alt="CriticMarkup MCP Workflow" width="100%">
+  <img src="images/workflow.svg" alt="CriticMarkup MCP Workflow" width="100%">
 </p>
+
 
 ### What it allows LLM agents to do:
 1. **Propose precise edits (CriticMarkup):**
