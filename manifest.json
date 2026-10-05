@@ -1,11 +1,17 @@
 {
-  "manifest_version": "0.1",
+  "manifest_version": "0.2",
   "name": "mcp-criticmarkup",
   "version": "0.1.0",
   "description": "CriticMarkup track-changes and threaded comments for Markdown.",
+  "author": {
+    "name": "Marten"
+  },
   "server": {
     "type": "python",
-    "entrypoint": "server.py",
-    "dependencies": ["mcp>=1.0.0"]
+    "entry_point": "server/server.py",
+    "mcp_config": {
+      "command": "python",
+      "args": ["${__dirname}/server/server.py"]
+    }
   }
 }

@@ -71,18 +71,15 @@ $$\text{Markdown} \xrightarrow{\text{Pandoc}} \text{Typst} \xrightarrow{} \text{
 
 ## Installation & Setup
 
-### Option 1: One-Click Bundle (`.mcpb`)
-Download the latest `mcp-criticmarkup.mcpb` from the Releases page and double-click to install in compatible MCP hosts.
+First, you need [Python](https://www.python.org/downloads/), and the `mcp` package (install with `pip install mcp` in terminal)
 
-### Option 2: Manual Configuration
-Download the repo manually, then import from `.json` with:
-
+Download the repo to a location of your choice, then import this `.json` in your MCP configuration:
 ```json
 {
   "mcpServers": {
     "criticmarkup": {
       "command": "python", 
-      "args": ["/ABSOLUTE/PATH/TO/mcp-criticmarkup/server.py"]
+      "args": ["/ABSOLUTE/PATH/TO/mcp-criticmarkup/server/server.py"]
     }
   }
 }

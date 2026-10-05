@@ -1,5 +1,42 @@
+# Bytecode and Python cache
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+
+# Virtual Environments
 .venv/
-*.mcpb
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Packaging builds & MCP bundle archives
 dist/
+build/
+*.egg-info/
+*.mcpb
+*.zip
+
+# Operating System files (Windows / macOS)
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+desktop.ini
+.DS_Store
+
+# Cloud sync conflict files (OneDrive, Syncthing, Dropbox)
+*.sync-conflict-*
+*conflicted copy*
+
+# IDE & Editor configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables & local secrets
+.env
+.env.*

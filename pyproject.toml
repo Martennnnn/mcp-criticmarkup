@@ -3,6 +3,7 @@ name = "mcp-criticmarkup"
 version = "0.1.0"
 description = "CriticMarkup track-changes and threaded comments for Markdown via MCP"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.0.0"
