@@ -1,0 +1,11 @@
+{
+  "manifest_version": "0.1",
+  "name": "mcp-criticmarkup",
+  "version": "0.1.0",
+  "description": "CriticMarkup track-changes and threaded comments for Markdown.",
+  "server": {
+    "type": "python",
+    "entrypoint": "server.py",
+    "dependencies": ["mcp>=1.0.0"]
+  }
+}
