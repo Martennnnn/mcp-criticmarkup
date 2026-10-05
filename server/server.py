@@ -11,16 +11,14 @@ mcp = FastMCP("MarkdownCriticReviewer")
 
 # --- REGEX & PARSING PATTERNS ---
 
-# Matches Code blocks, Inline code, Link URLs, CriticMarkup, strict beginning-of-file YAML frontmatter, and bottom JSON payloads
-# (Note: \A ensures frontmatter is only matched at character index 0, leaving markdown horizontal rules '---' alone)
+# Primary pattern: Protects unresolved CriticMarkup and bottom JSON payloads.
 PROTECTED_PATTERN = re.compile(
-    r'(```[\s\S]*?```|`[^`\n]+`|\]\([^\)]*\)|\{[\+\-\~\=\>]{2}[\s\S]*?[\+\-\~\=\>]{2}\}|\A---[^\n]*\n[\s\S]*?\n---|<!--c:[a-zA-Z0-9]+\s+\{[\s\S]*?\}\s*-->)'
+    r'(\{[\+\-\~\=\>]{2}[\s\S]*?[\+\-\~\=\>]{2}\}|<!--c:[a-zA-Z0-9]+\s+\{[\s\S]*?\}\s*-->)'
 )
 
-# Protected pattern for COMMENTS: Same as PROTECTED_PATTERN, but intentionally omits CriticMarkup
-# so users and the AI can anchor discussion threads to proposed diffs.
+# Comments protect the bottom JSON payloads (allowing comments on CriticMarkup and code)
 PROTECTED_PATTERN_COMMENTS = re.compile(
-    r'(```[\s\S]*?```|`[^`\n]+`|\]\([^\)]*\)|\A---[^\n]*\n[\s\S]*?\n---|<!--c:[a-zA-Z0-9]+\s+\{[\s\S]*?\}\s*-->)'
+    r'<!--c:[a-zA-Z0-9]+\s+\{[\s\S]*?\}\s*-->'
 )
 
 # Inline anchors marking comment highlights: <!--c:id1s--> and <!--c:id1e-->
@@ -43,7 +41,7 @@ def _load_md(filepath: str) -> str:
 
 
 def _is_in_protected_region(content: str, start_pos: int, end_pos: int) -> bool:
-    """Checks if a target string span overlaps with code, CriticMarkup, or JSON payloads."""
+    """Checks if a target string span overlaps with unresolved CriticMarkup or JSON payloads."""
     for match in PROTECTED_PATTERN.finditer(content):
         m_start, m_end = match.span()
         if max(start_pos, m_start) < min(end_pos, m_end):
@@ -77,7 +75,7 @@ def _get_valid_matches(content: str, search_string: str, allow_critic: bool = Fa
         if pos == -1:
             break
         end = pos + len(search_string)
-        
+
         is_protected = any(
             max(pos, m.start()) < min(end, m.end())
             for m in pattern.finditer(content)
@@ -146,11 +144,15 @@ def _apply_single_change(content: str, search_string: str, replacement_string: s
 @mcp.tool()
 def get_md_contents(filepath: str) -> str:
     """
-    Reads a markdown file, returning the prose alongside an abbreviated summary of 
+    Reads a markdown file, returning raw markdown prose alongside an abbreviated summary of 
     discussion comment threads at the bottom instead of bulky raw JSON.
     Inline anchors (<!--c:...s-->) remain in the body text for location context.
 
-    Use when: You need to inspect the document before suggesting revisions or answering questions.
+    Core Workflow:
+    - After inspecting the document, synthesize and bundle ALL desired revisions first.
+    - Execute edits together in a single batch using replace_multiple, rather than calling tools one-by-one.
+
+    Use when: You need to inspect the document.
     """
     content = _load_md(filepath)
 
@@ -185,9 +187,17 @@ def replace_multiple(filepath: str, edits: list[dict]) -> str:
     Applies MULTIPLE editorial revisions across different sections in a single call using CriticMarkup.
     Edits are applied bottom-to-top to maintain offset stability across the document.
     
+    Intended usage:
+
+    1. Bundle ideas first to minimize token-costly tool calls.
+    2. Surgical Precision: Do NOT replace entire paragraphs or large sections for minor corrections.
+    Keep 'search_string' and 'replacement_string' strictly minimal—target only the specific phrase or sentence
+    being revised, with just enough surrounding words to ensure a unique match. Large block replacements ruin
+    granular track-changes review. If a search string matches in multiple places across the file, you will 
+    receive an error and can retry with more surrounding context.
+    3. Order of Operations: Propose all text revisions (replace_multiple/request_changes) BEFORE adding discussion comments.
+
     Use when: Making several prose revisions across a chapter or file at once.
-    Note: Always propose text changes (via replace_multiple or request_changes) BEFORE adding comments,
-    so inline comment anchors do not interfere with search strings.
 
     Args:
         filepath: Absolute path to the markdown file.
@@ -198,38 +208,65 @@ def replace_multiple(filepath: str, edits: list[dict]) -> str:
     if not edits:
         raise ValueError("No edits supplied in the 'edits' list.")
 
-    # Phase 1: Validate all edits and collect match positions
+    applied_count = 0
+    failed_edits = []
     planned_edits = []
+
+    # Phase 1: Test each edit and record matches or specific reasons for failure
     for i, edit in enumerate(edits):
         search_str = edit.get("search_string") or edit.get("search") or ""
         replace_str = edit.get("replacement_string") if "replacement_string" in edit else edit.get("replace", "")
+        if replace_str is None:
+            replace_str = ""
+
+        if not search_str.strip():
+            failed_edits.append(f"Edit #{i+1}: 'search_string' was empty or whitespace.")
+            continue
 
         matches = _get_valid_matches(content, search_str)
         if len(matches) == 0:
-            raise ValueError(
-                f"Edit #{i+1} failed: '{search_str[:50]}...' was not found in editable text. "
-                "Ensure exact match without overlapping existing unresolved CriticMarkup."
-            )
+            failed_edits.append(f"Edit #{i+1}: Target text '{search_str[:50]}...' not found in editable text.")
+            continue
         if len(matches) > 1:
-            raise ValueError(
-                f"Edit #{i+1} failed: '{search_str[:50]}...' matched {len(matches)} times. "
-                "Supply more surrounding context to guarantee uniqueness."
-            )
+            failed_edits.append(f"Edit #{i+1}: Target text '{search_str[:50]}...' matched {len(matches)} times (ambiguous match).")
+            continue
 
         start_pos, end_pos = matches[0]
-        planned_edits.append((start_pos, end_pos, search_str, replace_str))
+        planned_edits.append((start_pos, end_pos, search_str, replace_str, i + 1))
 
-    # Phase 2: Sort edits in REVERSE order (bottom to top) so index offsets stay valid
-    planned_edits.sort(key=lambda x: x[0], reverse=True)
+    # Phase 2: Check for overlapping spans among successful matches
+    planned_edits.sort(key=lambda x: x[0])
+    non_overlapping_edits = []
+    last_end = -1
+    for start_pos, end_pos, search_str, replace_str, idx in planned_edits:
+        if start_pos < last_end:
+            failed_edits.append(f"Edit #{idx}: Overlapped with an earlier edit in this batch.")
+            continue
+        non_overlapping_edits.append((start_pos, end_pos, search_str, replace_str))
+        last_end = end_pos
 
-    # Phase 3: Apply each edit
-    for _, _, search_str, replace_str in planned_edits:
+    # Phase 3: Apply valid edits in REVERSE order (bottom to top) to maintain offsets
+    non_overlapping_edits.sort(key=lambda x: x[0], reverse=True)
+    for _, _, search_str, replace_str in non_overlapping_edits:
         content = _apply_single_change(content, search_str, replace_str)
+        applied_count += 1
 
-    with open(filepath, 'w', encoding='utf-8') as f:
-        f.write(content)
+    # Save changes if at least one edit succeeded
+    if applied_count > 0:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
 
-    return f"Successfully applied all {len(planned_edits)} edits across the document."
+    # Phase 4: Construct diagnostic feedback
+    report = [f"Successfully applied {applied_count} of {len(edits)} edits."]
+    if failed_edits:
+        report.append("\nISSUES ENCOUNTERED (Please review and mention these to the user in your response):")
+        for fail in failed_edits:
+            report.append(f"- {fail}")
+
+    if applied_count == 0 and failed_edits:
+        raise ValueError("\n".join(report))
+
+    return "\n".join(report)
 
 
 @mcp.tool()
