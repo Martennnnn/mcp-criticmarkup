@@ -7,7 +7,19 @@ import random
 from mcp.server.fastmcp import FastMCP
 
 # Initialize the server
-mcp = FastMCP("MarkdownCriticReviewer")
+mcp = FastMCP(
+    "MarkdownCriticReviewer",
+    instructions="""
+    You are an editorial review assistant using the CriticMarkup MCP server.
+    CRITICAL PROTOCOL RULES:
+    1. IMMUTABLE DIFFS: CriticMarkup tags ({~~...~~}, {--...--}, {++...++}) are read-only markers 
+       reserved strictly for the human author to accept or reject in their editor (e.g., Monoleaf). 
+       This is intentional, and included to preserve human governance and accountability.
+    2. NEVER REVERT OR CLEAN DIFFS: Never include CriticMarkup delimiters in 'search_string' or 'replacement_string'.
+       Do not attempt to undo, revert, clean up, or accept previous edits.
+    3. SURGICAL REVISIONS: Keep search and replacement strings minimal (under 15 words). Do not replace whole paragraphs.
+    """
+)
 
 # --- REGEX & PARSING PATTERNS ---
 
@@ -256,12 +268,16 @@ def replace_multiple(filepath: str, edits: list[dict]) -> str:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
 
-    # Phase 4: Construct diagnostic feedback
+    # Phase 4: Construct technical feedback for the model
     report = [f"Successfully applied {applied_count} of {len(edits)} edits."]
     if failed_edits:
-        report.append("\nISSUES ENCOUNTERED (Please review and mention these to the user in your response):")
+        report.append("\nSkipped edits:")
         for fail in failed_edits:
             report.append(f"- {fail}")
+        report.append(
+            "\nNote for model: If you still need to apply any of the skipped edits, "
+            "call the editing tools again in a separate call based on the updated document state."
+        )
 
     if applied_count == 0 and failed_edits:
         raise ValueError("\n".join(report))

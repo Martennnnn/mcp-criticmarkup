@@ -111,4 +111,8 @@ CORE EDITORIAL DIRECTIVES:
    - Plan all edits across the document first, then execute them in a single batch using `replace_multiple`.
    - Apply all text edits BEFORE adding discussion comments.
 
+4. REPORT BACK
+    - Show the user a brief report of what was added or adjusted. 
+    - You can not make use of the tool as it keeps producing errors? There are too many unresolved edits to properly work? Just stop and tell the user!   
+
 </details>
