@@ -69,6 +69,17 @@ $$\text{Markdown} \xrightarrow{\text{Pandoc}} \text{Typst} \xrightarrow{} \text{
 
 ---
 
+## Document Settings
+
+One setting is supported file via YAML frontmatter as of now:
+```yaml
+---
+reviewer:
+  max_lines: 100  # Truncates visible text to 100 lines
+---
+```
+---
+
 ## Installation & Setup
 
 First, you need [Python](https://www.python.org/downloads/), and the `mcp` package (install with `pip install mcp` in terminal)
